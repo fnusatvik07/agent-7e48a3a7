@@ -60,3 +60,21 @@
 - URI template params (e.g. {table_name}) map directly to function params
 - Tested via FastMCP in-memory Client: created table, inserted 3 rows, verified all 4 resources
 - Next: Feature 4 (Functional tests: 22 tests with FastMCP in-memory Client)
+
+=== Session 5 (Feature 4: Functional tests — 22 tests) — PASSED ===
+- Created test_server.py with 22 pytest tests using FastMCP in-memory Client
+- Skills loaded: fastmcp, testing
+- All 22 tests pass in 0.53s
+- Test structure:
+  - autouse fixture `fresh_db`: uses tmp_path + monkeypatch for SQLITE_DB_PATH isolation
+  - Helper `_create_users_table()` for reuse across tests
+  - 6 Table Management tests (create, all options, duplicate error, describe, drop, nonexistent error)
+  - 8 CRUD tests (insert_row, insert_rows batch, query WHERE+params, reject non-SELECT, update+verify, update no-WHERE error, delete+verify, delete no-WHERE error)
+  - 4 Resource tests (db://tables, schema, count, stats)
+  - 4 Edge case tests (1000-row limit, WAL mode, empty table, missing NOT NULL column)
+- Key patterns:
+  - `async with Client(mcp) as client:` for each test (in-memory, no network)
+  - `result.data` for tool results (str), `result[0].text` for resource results
+  - `pytest.raises(ToolError, match=...)` for error assertions
+  - WAL test opens direct sqlite3 connection to verify journal_mode
+- Next: Feature 5 (MCP Inspector E2E testing + 2 screenshots)
