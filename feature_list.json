@@ -63,7 +63,7 @@
       "Edge Case Tests (4): test query 1000-row limit (insert 1001+, verify max 1000 returned), test WAL mode enabled, test empty table returns empty list, test insert with missing required column raises ToolError",
       "Run all tests: `uv run pytest test_server.py -v` — all 22 must pass"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 5,
