@@ -47,7 +47,7 @@
       "All resources must return str (use json.dumps for dicts/lists)",
       "Test: start server, create a table with some data, verify each resource URI returns correct data"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 4,

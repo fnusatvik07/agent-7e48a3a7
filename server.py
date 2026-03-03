@@ -270,6 +270,87 @@ def delete_rows(
         conn.close()
 
 
+# ── Resources ──────────────────────────────────────────────────────
+
+
+@mcp.resource("db://tables")
+def list_tables_resource() -> str:
+    """List all tables in the database as a JSON array."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        tables = [row["name"] for row in rows]
+        return json.dumps(tables)
+    finally:
+        conn.close()
+
+
+@mcp.resource("db://tables/{table_name}/schema")
+def table_schema_resource(table_name: str) -> str:
+    """Return the schema for a specific table as JSON."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        columns = []
+        for row in rows:
+            columns.append(
+                {
+                    "name": row["name"],
+                    "type": row["type"],
+                    "nullable": not row["notnull"],
+                    "default": row["dflt_value"],
+                    "primary_key": bool(row["pk"]),
+                }
+            )
+        return json.dumps(columns, indent=2)
+    finally:
+        conn.close()
+
+
+@mcp.resource("db://tables/{table_name}/count")
+def table_count_resource(table_name: str) -> str:
+    """Return the row count for a specific table."""
+    conn = get_connection()
+    try:
+        row = conn.execute(f"SELECT COUNT(*) as cnt FROM {table_name}").fetchone()
+        return json.dumps({"table": table_name, "count": row["cnt"]})
+    finally:
+        conn.close()
+
+
+@mcp.resource("db://stats")
+def db_stats_resource() -> str:
+    """Return database statistics: file size, table count, total rows."""
+    conn = get_connection()
+    try:
+        db_path = os.environ.get("SQLITE_DB_PATH", "data/database.db")
+        file_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+        table_count = len(tables)
+
+        total_rows = 0
+        for table in tables:
+            row = conn.execute(
+                f"SELECT COUNT(*) as cnt FROM {table['name']}"
+            ).fetchone()
+            total_rows += row["cnt"]
+
+        return json.dumps(
+            {
+                "file_size_bytes": file_size,
+                "table_count": table_count,
+                "total_rows": total_rows,
+            }
+        )
+    finally:
+        conn.close()
+
+
 # ── Main ────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
