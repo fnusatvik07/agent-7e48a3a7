@@ -1,0 +1,196 @@
+# SQLite MCP Server — FastMCP
+
+An MCP server built with FastMCP that provides full CRUD access to a SQLite database.
+Clients (Claude Desktop, Claude Code, etc.) can create tables, insert rows,
+query data, update records, and manage schema — all through MCP tools.
+
+> Technical implementation patterns are available via skills in .claude/skills/.
+> Load the `fastmcp` and `uv` skills before coding.
+
+## Technology Stack
+
+- Language: Python 3.10+
+- MCP framework: FastMCP
+- Database: SQLite (file-based, single-file DB)
+- Package manager: uv
+- Testing: pytest + FastMCP in-memory Client + MCP Inspector (browser)
+
+## Project Structure
+
+```
+server.py              — Main FastMCP server with all tools and resources
+pyproject.toml         — Python dependencies (fastmcp, pytest, pytest-asyncio)
+test_server.py         — Functional tests using FastMCP in-memory Client
+README.md              — Setup, usage, tool reference
+data/                  — Default directory for SQLite database files
+screenshots/           — MCP Inspector screenshots showing tools in action
+```
+
+## Feature 1: Server Setup + Table Management Tools
+
+### Server Instance
+
+- Name: "SQLite MCP Server"
+- Instructions: "A database server for SQLite. Use tools to create tables, query data, insert/update/delete rows."
+
+### Tools
+
+- **create_table**
+  - Params: `table_name: str`, `columns: list[dict]` (each dict has `name`, `type`, optional `primary_key`, `not_null`, `default`)
+  - Supported types: TEXT, INTEGER, REAL, BLOB, BOOLEAN, DATETIME
+  - Returns: confirmation message with CREATE TABLE SQL used
+  - Raises ToolError if table already exists
+
+- **list_tables**
+  - No params
+  - Returns: list of table names in the database
+
+- **describe_table**
+  - Params: `table_name: str`
+  - Returns: column info (name, type, nullable, default, primary key) for the table
+  - Raises ToolError if table doesn't exist
+
+- **drop_table**
+  - Params: `table_name: str`
+  - Returns: confirmation message
+  - Raises ToolError if table doesn't exist
+
+### Requirements
+
+- Database path configurable via environment variable `SQLITE_DB_PATH` (default: `data/database.db`)
+- Auto-create `data/` directory if it doesn't exist
+- **Default transport: HTTP on port 8000** (`mcp.run(transport="http", port=8000)`)
+- Support STDIO transport via environment variable `MCP_TRANSPORT=stdio` for Claude Desktop/Claude Code integration
+- Use `if __name__ == "__main__": mcp.run()` guard (check `MCP_TRANSPORT` env var to pick transport)
+- All SQL must use parameterized queries (no string interpolation) to prevent injection
+
+## Feature 2: CRUD Tools (Insert, Query, Update, Delete)
+
+### Tools
+
+- **insert_row**
+  - Params: `table_name: str`, `data: dict` (column→value mapping)
+  - Returns: inserted row ID and confirmation
+  - Raises ToolError if table doesn't exist or data violates constraints
+
+- **insert_rows**
+  - Params: `table_name: str`, `rows: list[dict]` (batch insert)
+  - Returns: count of inserted rows
+  - Uses `executemany` for efficiency
+
+- **query**
+  - Params: `sql: str` (SELECT query only), `params: list` (optional bind params)
+  - Returns: list of dicts (column→value) for each row
+  - Raises ToolError if query is not a SELECT statement
+  - Limit results to 1000 rows by default
+
+- **update_rows**
+  - Params: `table_name: str`, `data: dict` (columns to update), `where: str` (WHERE clause), `params: list` (bind params for WHERE)
+  - Returns: count of updated rows
+  - Raises ToolError if no WHERE clause provided (safety)
+
+- **delete_rows**
+  - Params: `table_name: str`, `where: str` (WHERE clause), `params: list` (bind params)
+  - Returns: count of deleted rows
+  - Raises ToolError if no WHERE clause provided (safety)
+
+### Requirements
+
+- All tools must use parameterized queries
+- `query` tool must reject non-SELECT statements (no INSERT/UPDATE/DELETE/DROP via raw SQL)
+- Return results as list of dicts with column names as keys
+- Connection uses WAL mode for better concurrent read performance
+
+## Feature 3: Resources + Database Info
+
+### Resources
+
+- **`db://tables`** — list of all tables (JSON array)
+- **`db://tables/{table_name}/schema`** — schema for a specific table (JSON)
+- **`db://tables/{table_name}/count`** — row count for a table
+- **`db://stats`** — database file size, table count, total rows across all tables
+
+## Feature 4: Functional Tests
+
+### Tests (test_server.py)
+
+Using FastMCP in-memory Client (no network, no HTTP needed):
+
+**Table Management Tests:**
+1. Test create_table → verify table exists via list_tables
+2. Test create_table with all column options (primary_key, not_null, default)
+3. Test ToolError on duplicate table creation
+4. Test describe_table returns correct schema info
+5. Test drop_table removes the table
+6. Test ToolError on describe/drop for non-existent table
+
+**CRUD Tests:**
+7. Test insert_row → verify via query tool
+8. Test insert_rows (batch) → verify count matches
+9. Test query with WHERE clause and bind params
+10. Test query rejects non-SELECT statements (INSERT, UPDATE, DELETE, DROP)
+11. Test update_rows → verify changed values via query
+12. Test update_rows ToolError when no WHERE clause
+13. Test delete_rows → verify row removed via query
+14. Test delete_rows ToolError when no WHERE clause
+
+**Resource Tests:**
+15. Test `db://tables` returns table list after creating tables
+16. Test `db://tables/{name}/schema` returns correct schema JSON
+17. Test `db://tables/{name}/count` returns correct row count
+18. Test `db://stats` returns file size, table count, total rows
+
+**Edge Case Tests:**
+19. Test query result limit (insert 1001+ rows, verify max 1000 returned)
+20. Test WAL mode is enabled (open direct sqlite3 connection to the DB file, verify `PRAGMA journal_mode` returns `wal`)
+21. Test empty table query returns empty list
+22. Test insert with missing required column raises ToolError
+
+### Running Tests
+
+```bash
+uv run pytest test_server.py -v
+```
+
+## Feature 5: MCP Inspector E2E Testing + Screenshots (2 screenshots)
+
+### Overview
+
+Use MCP Inspector to E2E test the server over HTTP. Connect, interact with a tool that exercises the database, and capture proof.
+
+### Steps
+
+1. Start the server: `uv run python server.py &` (HTTP on port 8000)
+2. Start Inspector: `npx @modelcontextprotocol/inspector &`
+3. Navigate to Inspector UI (typically `http://localhost:6274`)
+4. The Inspector defaults to **Streamable HTTP** transport with URL `http://localhost:8000/mcp` — click **Connect**
+5. Go to Tools tab → click **List Tools**
+6. **Screenshot 1** (`screenshots/inspector-tools.png`): Capture the Tools tab showing all 9 tools listed
+7. Click `create_table` tool → fill in params (table_name: "demo", columns with a couple of fields) → click **Run** → verify success response
+8. **Screenshot 2** (`screenshots/inspector-create-table.png`): Capture the tool execution result showing the CREATE TABLE confirmation
+9. Kill both background processes
+
+### Requirements
+
+- Exactly 2 screenshots — do NOT attempt more (browser automation is turn-expensive)
+- Use Playwright MCP tools for navigation, clicking, and screenshots
+- Viewport: 1280x720, viewport-only screenshots (never full-page)
+- **Screenshot size limit**: Playwright MCP has ~1MB buffer. If a screenshot fails with buffer error, use Bash instead: `npx playwright screenshot --viewport-size=1280,720 <url> <path>`
+- Each screenshot must be >10KB to be valid
+
+## Feature 6: README
+
+### README.md
+
+- Title: "SQLite MCP Server"
+- Description: what it does, screenshot preview from MCP Inspector
+- Installation: `uv add fastmcp`
+- Running:
+  - HTTP (default): `uv run python server.py` → serves on `http://localhost:8000`
+  - STDIO (for Claude): `MCP_TRANSPORT=stdio uv run python server.py`
+  - Inspector: start server first (`uv run python server.py`), then `npx @modelcontextprotocol/inspector` → connect via Streamable HTTP to `http://localhost:8000/mcp`
+- Claude Code setup: `.mcp.json` config example
+- Tool reference: table of all tools with params and descriptions
+- Resource reference: table of all resources
+- Screenshots section: embed the 2 inspector screenshots (tools list + tool execution)
+- Testing: `uv run pytest test_server.py -v`
