@@ -141,6 +141,135 @@ def drop_table(
         conn.close()
 
 
+# ── CRUD Tools ──────────────────────────────────────────────────────
+
+
+@mcp.tool
+def insert_row(
+    table_name: Annotated[str, Field(description="Name of the table")],
+    data: Annotated[dict, Field(description="Column-value mapping for the row")],
+) -> str:
+    """Insert a single row into a table."""
+    conn = get_connection()
+    try:
+        # Check table exists
+        existing = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        ).fetchone()
+        if not existing:
+            raise ToolError(f"Table '{table_name}' does not exist.")
+
+        columns = ", ".join(data.keys())
+        placeholders = ", ".join("?" for _ in data)
+        sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        try:
+            cursor = conn.execute(sql, list(data.values()))
+            conn.commit()
+            return f"Inserted row with ID {cursor.lastrowid} into '{table_name}'."
+        except sqlite3.IntegrityError as e:
+            raise ToolError(f"Constraint violation: {e}")
+    finally:
+        conn.close()
+
+
+@mcp.tool
+def insert_rows(
+    table_name: Annotated[str, Field(description="Name of the table")],
+    rows: Annotated[list[dict], Field(description="List of column-value mappings")],
+) -> str:
+    """Insert multiple rows into a table using batch insert."""
+    conn = get_connection()
+    try:
+        # Check table exists
+        existing = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        ).fetchone()
+        if not existing:
+            raise ToolError(f"Table '{table_name}' does not exist.")
+
+        if not rows:
+            return "No rows to insert."
+
+        columns = ", ".join(rows[0].keys())
+        placeholders = ", ".join("?" for _ in rows[0])
+        sql = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
+        try:
+            conn.executemany(sql, [list(r.values()) for r in rows])
+            conn.commit()
+            return f"Inserted {len(rows)} rows into '{table_name}'."
+        except sqlite3.IntegrityError as e:
+            raise ToolError(f"Constraint violation: {e}")
+    finally:
+        conn.close()
+
+
+@mcp.tool
+def query(
+    sql: Annotated[str, Field(description="SELECT query to execute")],
+    params: Annotated[list | None, Field(description="Bind parameters for the query")] = None,
+) -> str:
+    """Execute a SELECT query and return results as a list of dicts."""
+    # Only allow SELECT statements
+    stripped = sql.strip().upper()
+    if not stripped.startswith("SELECT"):
+        raise ToolError("Only SELECT queries are allowed. Use insert_row, update_rows, or delete_rows for mutations.")
+
+    conn = get_connection()
+    try:
+        cursor = conn.execute(sql, params or [])
+        rows = cursor.fetchmany(1000)
+        columns = [desc[0] for desc in cursor.description]
+        results = [dict(zip(columns, row)) for row in rows]
+        return json.dumps(results)
+    finally:
+        conn.close()
+
+
+@mcp.tool
+def update_rows(
+    table_name: Annotated[str, Field(description="Name of the table")],
+    data: Annotated[dict, Field(description="Column-value mapping of fields to update")],
+    where: Annotated[str, Field(description="WHERE clause (without the WHERE keyword)")],
+    params: Annotated[list | None, Field(description="Bind parameters for the WHERE clause")] = None,
+) -> str:
+    """Update rows in a table matching the WHERE clause."""
+    if not where or not where.strip():
+        raise ToolError("WHERE clause is required for safety. To update all rows, use 'WHERE 1=1'.")
+
+    conn = get_connection()
+    try:
+        set_clause = ", ".join(f"{col} = ?" for col in data.keys())
+        sql = f"UPDATE {table_name} SET {set_clause} WHERE {where}"
+        all_params = list(data.values()) + (params or [])
+        cursor = conn.execute(sql, all_params)
+        conn.commit()
+        return f"Updated {cursor.rowcount} row(s) in '{table_name}'."
+    finally:
+        conn.close()
+
+
+@mcp.tool
+def delete_rows(
+    table_name: Annotated[str, Field(description="Name of the table")],
+    where: Annotated[str, Field(description="WHERE clause (without the WHERE keyword)")],
+    params: Annotated[list | None, Field(description="Bind parameters for the WHERE clause")] = None,
+) -> str:
+    """Delete rows from a table matching the WHERE clause."""
+    if not where or not where.strip():
+        raise ToolError("WHERE clause is required for safety. To delete all rows, use 'WHERE 1=1'.")
+
+    conn = get_connection()
+    try:
+        sql = f"DELETE FROM {table_name} WHERE {where}"
+        cursor = conn.execute(sql, params or [])
+        conn.commit()
+        return f"Deleted {cursor.rowcount} row(s) from '{table_name}'."
+    finally:
+        conn.close()
+
+
 # ── Main ────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

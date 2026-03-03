@@ -32,7 +32,7 @@
       "All tools must use parameterized queries — no string interpolation for values",
       "Test: start server, use curl or MCP client to create a table, insert rows, query them, update, delete, verify each operation"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 3,
