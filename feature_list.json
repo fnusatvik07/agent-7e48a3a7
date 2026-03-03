@@ -1,0 +1,104 @@
+[
+  {
+    "id": 1,
+    "category": "backend",
+    "description": "Server setup + table management tools (create_table, list_tables, describe_table, drop_table)",
+    "steps": [
+      "Load the `fastmcp` and `uv` skills for implementation patterns",
+      "Run `uv init` to create pyproject.toml, then `uv add fastmcp pytest pytest-asyncio`",
+      "Create `data/` directory for SQLite database files",
+      "Create server.py with FastMCP instance (name='SQLite MCP Server', instructions per spec)",
+      "Implement `get_connection()` helper: reads SQLITE_DB_PATH env var (default: data/database.db), auto-creates data/ dir, enables WAL mode, returns sqlite3 connection with row_factory=sqlite3.Row",
+      "Implement `create_table` tool: params table_name + columns list[dict], builds CREATE TABLE SQL with supported types (TEXT, INTEGER, REAL, BLOB, BOOLEAN, DATETIME), raises ToolError if table exists, returns confirmation with SQL used",
+      "Implement `list_tables` tool: queries sqlite_master, returns list of table names",
+      "Implement `describe_table` tool: uses PRAGMA table_info, raises ToolError if table doesn't exist, returns column info",
+      "Implement `drop_table` tool: drops table, raises ToolError if doesn't exist, returns confirmation",
+      "Add __main__ guard: check MCP_TRANSPORT env var — if 'stdio' use mcp.run(), otherwise mcp.run(transport='http', port=8000)",
+      "Test: start server with `uv run python server.py &`, curl http://localhost:8000 to verify it starts, then kill the process"
+    ],
+    "passes": true
+  },
+  {
+    "id": 2,
+    "category": "backend",
+    "description": "CRUD tools (insert_row, insert_rows, query, update_rows, delete_rows)",
+    "steps": [
+      "Load the `fastmcp` skill for tool patterns and error handling",
+      "Implement `insert_row` tool: params table_name + data dict, uses parameterized INSERT, returns inserted row ID and confirmation, raises ToolError if table doesn't exist or constraint violation",
+      "Implement `insert_rows` tool: params table_name + rows list[dict], uses executemany for efficiency, returns count of inserted rows",
+      "Implement `query` tool: params sql (SELECT only) + optional params list, rejects non-SELECT statements with ToolError, limits results to 1000 rows, returns list of dicts with column names as keys",
+      "Implement `update_rows` tool: params table_name + data dict + where str + params list, raises ToolError if no WHERE clause, returns count of updated rows",
+      "Implement `delete_rows` tool: params table_name + where str + params list, raises ToolError if no WHERE clause, returns count of deleted rows",
+      "All tools must use parameterized queries — no string interpolation for values",
+      "Test: start server, use curl or MCP client to create a table, insert rows, query them, update, delete, verify each operation"
+    ],
+    "passes": false
+  },
+  {
+    "id": 3,
+    "category": "backend",
+    "description": "Resources (db://tables, db://tables/{name}/schema, db://tables/{name}/count, db://stats)",
+    "steps": [
+      "Load the `fastmcp` skill for resource patterns",
+      "Implement `db://tables` resource: returns JSON array of all table names",
+      "Implement `db://tables/{table_name}/schema` resource: returns JSON schema for a specific table using PRAGMA table_info",
+      "Implement `db://tables/{table_name}/count` resource: returns row count for a table",
+      "Implement `db://stats` resource: returns JSON with database file size, table count, total rows across all tables",
+      "All resources must return str (use json.dumps for dicts/lists)",
+      "Test: start server, create a table with some data, verify each resource URI returns correct data"
+    ],
+    "passes": false
+  },
+  {
+    "id": 4,
+    "category": "testing",
+    "description": "Functional tests using FastMCP in-memory Client (22 tests)",
+    "steps": [
+      "Load the `fastmcp` and `testing` skills for test patterns",
+      "Create test_server.py importing pytest, FastMCP Client, and the mcp instance from server.py",
+      "Create a pytest fixture that provides a fresh database path (use tmp_path) and patches SQLITE_DB_PATH env var",
+      "Table Management Tests (6): test create_table + verify via list_tables, test all column options, test ToolError on duplicate table, test describe_table schema, test drop_table, test ToolError on non-existent table",
+      "CRUD Tests (8): test insert_row + verify via query, test insert_rows batch + count, test query with WHERE + bind params, test query rejects non-SELECT (INSERT/UPDATE/DELETE/DROP), test update_rows + verify, test update_rows ToolError without WHERE, test delete_rows + verify, test delete_rows ToolError without WHERE",
+      "Resource Tests (4): test db://tables returns list, test db://tables/{name}/schema returns correct JSON, test db://tables/{name}/count returns count, test db://stats returns file size + table count + total rows",
+      "Edge Case Tests (4): test query 1000-row limit (insert 1001+, verify max 1000 returned), test WAL mode enabled, test empty table returns empty list, test insert with missing required column raises ToolError",
+      "Run all tests: `uv run pytest test_server.py -v` — all 22 must pass"
+    ],
+    "passes": false
+  },
+  {
+    "id": 5,
+    "category": "testing",
+    "description": "MCP Inspector E2E testing + 2 screenshots",
+    "steps": [
+      "Load the `playwright` and `testing` skills for E2E patterns",
+      "Start server: `uv run python server.py &` (HTTP on port 8000)",
+      "Start MCP Inspector: `npx @modelcontextprotocol/inspector &`",
+      "Navigate to Inspector UI (http://localhost:6274)",
+      "Inspector defaults to Streamable HTTP with URL http://localhost:8000/mcp — click Connect",
+      "Go to Tools tab, click List Tools",
+      "Screenshot 1 (screenshots/inspector-tools.png): capture Tools tab showing all 9 tools listed",
+      "Click create_table tool, fill in params (table_name: 'demo', columns with fields), click Run, verify success",
+      "Screenshot 2 (screenshots/inspector-create-table.png): capture the tool execution result showing CREATE TABLE confirmation",
+      "Kill both background processes",
+      "Verify both screenshots exist and are >10KB"
+    ],
+    "passes": false
+  },
+  {
+    "id": 6,
+    "category": "testing",
+    "description": "README.md with tool reference, setup instructions, and screenshots",
+    "steps": [
+      "Load the `testing` skill for README patterns",
+      "Create README.md with title 'SQLite MCP Server' and description",
+      "Add screenshot preview section embedding the 2 inspector screenshots",
+      "Add Installation section: `uv add fastmcp`",
+      "Add Running section: HTTP default (`uv run python server.py`), STDIO for Claude (`MCP_TRANSPORT=stdio uv run python server.py`), Inspector instructions",
+      "Add Claude Code setup section with .mcp.json config example",
+      "Add Tool reference table: all 9 tools with params and descriptions",
+      "Add Resource reference table: all 4 resources",
+      "Add Testing section: `uv run pytest test_server.py -v`"
+    ],
+    "passes": false
+  }
+]
