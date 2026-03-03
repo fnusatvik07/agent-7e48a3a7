@@ -30,3 +30,33 @@
 - FastMCP Client API: result = await client.call_tool(...) returns CallToolResult with .data (str), .is_error (bool), .content (list of TextContent)
 - Removed auto-generated main.py from uv init
 - Next: Feature 2 (CRUD tools: insert_row, insert_rows, query, update_rows, delete_rows)
+
+=== Session 3 (Feature 2: CRUD tools) — PASSED ===
+- Added 5 CRUD tools to server.py: insert_row, insert_rows, query, update_rows, delete_rows
+- Skills loaded: fastmcp
+- All tools use parameterized queries (no string interpolation for values)
+- Key implementation details:
+  - insert_row: checks table exists, catches IntegrityError → ToolError, returns lastrowid
+  - insert_rows: uses executemany for batch efficiency, returns count
+  - query: rejects non-SELECT via .strip().upper().startswith("SELECT"), uses fetchmany(1000) for row limit, returns list of dicts via dict(zip(columns, row))
+  - update_rows: requires non-empty WHERE clause, combines SET params + WHERE params
+  - delete_rows: requires non-empty WHERE clause
+- Tested via FastMCP in-memory Client: all operations verified (insert, query, update, delete, error cases)
+- All 9 tools now registered (4 table management + 5 CRUD)
+- FastMCP Client.call_tool() raises ToolError by default for error results — use try/except ToolError in tests
+- Next: Feature 3 (Resources: db://tables, db://tables/{name}/schema, db://tables/{name}/count, db://stats)
+
+=== Session 4 (Feature 3: Resources) — PASSED ===
+- Added 4 MCP resources to server.py using @mcp.resource decorator
+- Resources: db://tables, db://tables/{table_name}/schema, db://tables/{table_name}/count, db://stats
+- Skills loaded: fastmcp
+- All resources return str via json.dumps() as required by FastMCP
+- Key implementation details:
+  - list_tables_resource: queries sqlite_master, returns JSON array of table names
+  - table_schema_resource: uses PRAGMA table_info, returns JSON with name/type/nullable/default/primary_key
+  - table_count_resource: uses SELECT COUNT(*), returns JSON with table name and count
+  - db_stats_resource: returns file_size_bytes, table_count, total_rows across all tables
+- Client.read_resource() returns list of TextResourceContents; each has .text with the string data
+- URI template params (e.g. {table_name}) map directly to function params
+- Tested via FastMCP in-memory Client: created table, inserted 3 rows, verified all 4 resources
+- Next: Feature 4 (Functional tests: 22 tests with FastMCP in-memory Client)
