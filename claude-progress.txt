@@ -14,3 +14,19 @@
 - Default transport: HTTP on port 8000; STDIO via MCP_TRANSPORT=stdio env var
 - NO application code written
 - Next: Feature 1 (Server setup + table management tools)
+
+=== Session 2 (Feature 1: Server setup + table management tools) — PASSED ===
+- Created server.py with FastMCP instance, get_connection() helper, 4 table management tools
+- Created pyproject.toml via uv init, added fastmcp/pytest/pytest-asyncio deps
+- Skills loaded: fastmcp, uv
+- Tested via FastMCP in-memory Client — all tools work correctly
+- Tested HTTP server startup on port 8000 — MCP protocol responds correctly
+- Key decisions:
+  - get_connection() reads SQLITE_DB_PATH env var, defaults to data/database.db
+  - WAL mode enabled on every connection
+  - row_factory=sqlite3.Row for dict-like access
+  - ToolError raised for duplicate table, non-existent table
+  - __main__ guard checks MCP_TRANSPORT env var (default: http on 8000, stdio if MCP_TRANSPORT=stdio)
+- FastMCP Client API: result = await client.call_tool(...) returns CallToolResult with .data (str), .is_error (bool), .content (list of TextContent)
+- Removed auto-generated main.py from uv init
+- Next: Feature 2 (CRUD tools: insert_row, insert_rows, query, update_rows, delete_rows)
